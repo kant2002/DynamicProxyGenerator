@@ -1,5 +1,5 @@
 ﻿open Argu
-open System.Linq
+open System
 
 type Arguments =
     | Assembly of path: string
@@ -20,16 +20,24 @@ type Arguments =
 let reader = EnvironmentVariableConfigurationReader() :> IConfigurationReader
 let parser = ArgumentParser.Create<Arguments>(programName = "dynproxygen")
 
-let csharpType (typeInfo: System.Type) =
-    if typeInfo.FullName = "System.Void" then "void"
+let isVoid (typeInfo: System.Type) =
+    typeInfo.FullName = "System.Void"
+
+let csharpType typeInfo =
+    if isVoid typeInfo then "void"
     else typeInfo.FullName
+
+let parameterInfo (p: Reflection.ParameterInfo) =
+    let out = if p.IsOut then "out " else ""
+    sprintf "%s%s %s" out p.ParameterType.FullName p.Name
 
 [<EntryPoint>]
 let main argv =
     let results = parser.Parse argv
     let assemmblyPath = results.GetResult Assembly
     let typeName = results.GetResult Type
-    let asm = System.Reflection.Assembly.LoadFile(assemmblyPath)
+    System.AppDomain.CurrentDomain.BaseDirectory = IO.Path.GetDirectoryName(assemmblyPath) |> ignore
+    let asm = System.Reflection.Assembly.LoadFrom(assemmblyPath)
     let methods = results.GetResult Methods
     let implType = asm.GetType(typeName)
 
@@ -39,10 +47,12 @@ let main argv =
         implMethods
             |> Seq.filter (fun method -> methods |> Seq.contains method.Name)
             |> Seq.cast<System.Reflection.MethodInfo>
+            |> Seq.toArray
     let implCtors =
         implMethods
             |> Seq.filter (fun method -> method.Name = ".ctor")
             |> Seq.cast<System.Reflection.ConstructorInfo>
+            |> Seq.toArray
 
     let nsName = results.GetResult Namespace
     let name = results.GetResult Name
@@ -52,7 +62,8 @@ let main argv =
     printfn "public class %s" name
     printfn "{"
     printfn "    private static readonly Type __generated_type = Type.GetType(\"%s, %s\");" typeName assemblyName
-    printfn "    private readonly object __generated_instance;"
+    if implCtors.Length > 0 then
+        printfn "    private readonly object __generated_instance;"
     for ctor in implCtors do
         let ctorParams = ctor.GetParameters() |> Seq.map (fun p -> sprintf "%s %s" p.ParameterType.FullName p.Name) |> String.concat ", "
         let ctorParamNames = ctor.GetParameters() |> Seq.map (fun p -> sprintf "%s" p.Name) |> String.concat ", "
@@ -60,25 +71,28 @@ let main argv =
         printfn "    public %s(%s)" name ctorParams
         printfn "    {"
         if ctorParamNames.Length = 0 then
-            printfn "        __generated_instance = global::System.Activator.CreateInstance(__generated_type)"
+            printfn "        __generated_instance = global::System.Activator.CreateInstance(__generated_type);"
         else
-            printfn "        __generated_instance = global::System.Activator.CreateInstance(__generated_type, %s)" ctorParamNames
+            printfn "        __generated_instance = global::System.Activator.CreateInstance(__generated_type, %s);" ctorParamNames
 
         printfn "    }"
     for meth in implMethods2 do
-        let methParams = meth.GetParameters() |> Seq.map (fun p -> sprintf "%s %s" p.ParameterType.FullName p.Name) |> String.concat ", "
+        let methParams = meth.GetParameters() |> Seq.map parameterInfo |> String.concat ", "
         let methParamNames = meth.GetParameters() |> Seq.map (fun p -> sprintf "%s" p.Name) |> String.concat ", "
         let retType = csharpType meth.ReturnType
         printfn ""
         printfn "    public %s %s(%s)" retType meth.Name methParams
         printfn "    {"
-        printfn "        var __generated_method = _type.GetMethod(\"%s\", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod);" meth.Name
+        printfn "        var __generated_method = __generated_type.GetMethod(\"%s\", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod);" meth.Name
+        let saveResult = if isVoid meth.ReturnType then "" else "var __generated_result = "
+        let instance = if meth.IsStatic then "null" else "__generated_instance"
         if methParamNames.Length = 0 then
-            printfn "        var __generated_result = __generated_method.Invoke(__generated_instance);"
+            printfn "        %s__generated_method.Invoke(%s);" saveResult instance
         else
-            printfn "        var __generated_result = __generated_method.Invoke(__generated_instance, %s);" methParamNames
+            printfn "        %s__generated_method.Invoke(%s, %s);" saveResult instance methParamNames
 
-        printfn "        return __generated_result as %s;" retType
+        if not (isVoid meth.ReturnType) then
+            printfn "        return __generated_result as %s;" retType
         printfn "    }"
     printfn "}"
     printfn ""
