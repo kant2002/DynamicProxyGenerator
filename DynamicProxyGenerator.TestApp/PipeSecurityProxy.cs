@@ -17,14 +17,14 @@ public class PipeSecurityProxy
 
     public void SetAccessRule(System.IO.Pipes.PipeAccessRule rule)
     {
-        var __generated_method = __generated_type.GetMethod("SetAccessRule", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod);
-        __generated_method.Invoke(__generated_instance, rule);
+        var __generated_method = __generated_type.GetMethod("SetAccessRule", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod, [global::System.Type.GetType("System.IO.Pipes.PipeAccessRule")]);
+        __generated_method.Invoke(__generated_instance, [rule]);
     }
 
     public void SetAccessRule(System.Security.AccessControl.AccessRule rule)
     {
-        var __generated_method = __generated_type.GetMethod("SetAccessRule", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod);
-        __generated_method.Invoke(__generated_instance, rule);
+        var __generated_method = __generated_type.GetMethod("SetAccessRule", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod, [global::System.Type.GetType("System.Security.AccessControl.AccessRule")]);
+        __generated_method.Invoke(__generated_instance, [rule]);
     }
 }
 

@@ -31,6 +31,9 @@ let parameterInfo (p: Reflection.ParameterInfo) =
     let out = if p.IsOut then "out " else ""
     sprintf "%s%s %s" out p.ParameterType.FullName p.Name
 
+let parameterType (p: Reflection.ParameterInfo) =
+    sprintf "global::System.Type.GetType(\"%s\")" p.ParameterType.FullName
+
 [<EntryPoint>]
 let main argv =
     let results = parser.Parse argv
@@ -81,15 +84,22 @@ let main argv =
         let methParamNames = meth.GetParameters() |> Seq.map (fun p -> sprintf "%s" p.Name) |> String.concat ", "
         let retType = csharpType meth.ReturnType
         printfn ""
-        printfn "    public %s %s(%s)" retType meth.Name methParams
+        let hasThis = if meth.IsDefined(typeof<System.Runtime.CompilerServices.ExtensionAttribute>, false) then "this " else ""
+        printfn "    public %s %s(%s%s)" retType meth.Name hasThis methParams
         printfn "    {"
-        printfn "        var __generated_method = __generated_type.GetMethod(\"%s\", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod);" meth.Name
+        let reflectionFlags = 
+            if meth.IsStatic then 
+                "System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod"
+            else
+                "System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.InvokeMethod"
+        let types = meth.GetParameters() |> Seq.map parameterType |> String.concat ", "
+        printfn "        var __generated_method = __generated_type.GetMethod(\"%s\", %s, [%s]);" meth.Name reflectionFlags types
         let saveResult = if isVoid meth.ReturnType then "" else "var __generated_result = "
         let instance = if meth.IsStatic then "null" else "__generated_instance"
         if methParamNames.Length = 0 then
-            printfn "        %s__generated_method.Invoke(%s);" saveResult instance
+            printfn "        %s__generated_method.Invoke(%s, new object[0]);" saveResult instance
         else
-            printfn "        %s__generated_method.Invoke(%s, %s);" saveResult instance methParamNames
+            printfn "        %s__generated_method.Invoke(%s, [%s]);" saveResult instance methParamNames
 
         if not (isVoid meth.ReturnType) then
             printfn "        return __generated_result as %s;" retType
